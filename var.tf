@@ -48,7 +48,7 @@ variable "aws_secret_access_key" {
 variable "dynamodb_tables" {
   description = "List of complete DynamoDB table names to backup"
   type        = list(string)
-  default     = ["mfa-api_production_u2f_global", "mfa-api_production_totp_global", "mfa-api_production_api-key_global"]
+  default     = ["mfa-api_prod_u2f_global", "mfa-api_prod_totp_global", "mfa-api_prod_api-key_global"]
 }
 
 variable "backup_retention_days" {
