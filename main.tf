@@ -18,8 +18,8 @@ locals {
   b2_env_vars = var.b2_backup_enabled && var.b2_application_key_id != "" && var.b2_application_key != "" && var.b2_bucket != "" && var.b2_endpoint != "" ? {
     B2_APPLICATION_KEY_ID = var.b2_application_key_id
     B2_APPLICATION_KEY    = var.b2_application_key
-    B2_BUCKET            = var.b2_bucket
-    B2_ENDPOINT          = var.b2_endpoint
+    B2_BUCKET             = var.b2_bucket
+    B2_ENDPOINT           = var.b2_endpoint
   } : {}
 }
 
@@ -141,9 +141,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "mfa_backups" {
       prefix = "native-exports/"
     }
 
-    # Different retention for dev vs prod
     expiration {
-      days = var.environment == "prod" ? var.backup_retention_days : 14 # Shorter retention for dev
+      days = var.backup_retention_days
     }
 
     # Delete old versions after 7 days
@@ -249,8 +248,8 @@ resource "aws_lambda_function" "daily_backup" {
   environment {
     variables = merge({
       # Required environment variables
-      BACKUP_BUCKET   = data.aws_s3_bucket.mfa_backups.bucket
-      ENVIRONMENT     = var.environment
+      BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
+      ENVIRONMENT   = var.environment
       # Table names constructed from Terraform variables
       DYNAMODB_TABLES = jsonencode(local.table_names)
     }, local.b2_env_vars) # Conditionally add B2 variables
@@ -265,7 +264,7 @@ resource "aws_lambda_function" "daily_backup" {
 # CloudWatch Log Group for Daily Backup
 resource "aws_cloudwatch_log_group" "daily_backup_logs" {
   name              = "/aws/lambda/${var.app_name}-daily-backup-${var.environment}"
-  retention_in_days = var.environment == "prod" ? 30 : 14 # Shorter retention for dev
+  retention_in_days = 30
   tags              = local.common_tags
 }
 
@@ -430,8 +429,8 @@ resource "aws_lambda_function" "disaster_recovery" {
 
   environment {
     variables = {
-      BACKUP_BUCKET   = data.aws_s3_bucket.mfa_backups.bucket
-      ENVIRONMENT     = var.environment
+      BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
+      ENVIRONMENT   = var.environment
       # Pass the actual table names
       DYNAMODB_TABLES = jsonencode(local.table_names)
     }
@@ -446,6 +445,6 @@ resource "aws_lambda_function" "disaster_recovery" {
 # CloudWatch Log Group for Disaster Recovery
 resource "aws_cloudwatch_log_group" "disaster_recovery_logs" {
   name              = "/aws/lambda/${var.app_name}-disaster-recovery-${var.environment}"
-  retention_in_days = var.environment == "prod" ? 30 : 14
+  retention_in_days = 30
   tags              = local.common_tags
 }
