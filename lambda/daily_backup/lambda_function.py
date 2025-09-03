@@ -264,18 +264,18 @@ def create_export_manifest(
 def get_backblaze_config() -> dict[str, str]:
     """Get Backblaze configuration from environment variables"""
     required_vars = {
-        'b2_application_key_id': 'key_id',
-        'b2_application_key': 'app_key',
-        'b2_bucket': 'bucket',
-        'b2_endpoint': 'endpoint'
+        'B2_APPLICATION_KEY_ID': 'key_id',
+        'B2_APPLICATION_KEY': 'app_key',
+        'B2_BUCKET': 'bucket',
+        'B2_ENDPOINT': 'endpoint'
     }
     config: dict[str, str] = {}
 
     try:
         for env_var, config_key in required_vars.items():
-            value = os.environ.get(env_var.upper())
+            value = os.environ.get(env_var)
             if not value:
-                raise ValueError(f"Missing required Backblaze environment variable: {env_var.upper()}")
+                raise ValueError(f"Missing required Backblaze environment variable: {env_var}")
             config[config_key] = value
 
         return config

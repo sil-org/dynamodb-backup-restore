@@ -22,7 +22,7 @@ output "disaster_recovery_function_arn" {
 # Table Information
 output "dynamodb_tables_monitored" {
   description = "List of DynamoDB tables being backed up"
-  value       = local.table_names
+  value       = var.dynamodb_tables
 }
 
 # Backup Schedule Information
