@@ -59,12 +59,12 @@ def get_tables_to_backup() -> list[str]:
         logger.info(f"Tables from Terraform: {tables}")
         return tables
 
-    except KeyError:
+    except KeyError as e:
         logger.error("DYNAMODB_TABLES environment variable not found")
-        raise ValueError("DYNAMODB_TABLES environment variable is required")
+        raise ValueError("DYNAMODB_TABLES environment variable is required") from e
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse DYNAMODB_TABLES: {e}")
-        raise ValueError(f"Invalid DYNAMODB_TABLES format: {e}")
+        raise ValueError(f"Invalid DYNAMODB_TABLES format: {e}") from e
 
 
 def generate_export_prefix(table_name: str, backup_date: str) -> str:
@@ -271,13 +271,16 @@ def get_backblaze_config() -> dict[str, str]:
     }
     config: dict[str, str] = {}
 
-    for env_var, config_key in required_vars.items():
-        value = os.environ.get(env_var.upper())
-        if not value:
-            raise ValueError(f"Missing required Backblaze environment variable: {env_var.upper()}")
-        config[config_key] = value
+    try:
+        for env_var, config_key in required_vars.items():
+            value = os.environ.get(env_var.upper())
+            if not value:
+                raise ValueError(f"Missing required Backblaze environment variable: {env_var.upper()}")
+            config[config_key] = value
 
-    return config
+        return config
+    except KeyError as e:
+        raise ValueError(f"Environment variable access error: {e}") from e
 
 
 def list_s3_objects(bucket: str, prefix: str) -> list[dict[str, Any]]:

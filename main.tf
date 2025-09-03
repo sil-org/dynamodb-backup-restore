@@ -1,18 +1,14 @@
 locals {
   common_tags = {
+    environment       = var.environment
+    app_name          = var.app_name
+    customer          = var.customer
     itse_app_env      = var.itse_app_env
-    workspace         = var.environment
+    itse_app_name     = var.app_name
     itse_app_customer = var.customer
     managed_by        = var.managed_by
-    itse_app_name     = var.app_name
-    environment       = var.environment
+    workspace         = var.environment
   }
-
-  # Use existing bucket name
-  backup_bucket_name = var.backup_bucket_name
-
-  # Use table names directly from variable
-  table_names = var.dynamodb_tables
 
   # B2 environment variables (only set if B2 backup is enabled and credentials are provided)
   b2_env_vars = var.b2_backup_enabled && var.b2_application_key_id != "" && var.b2_application_key != "" && var.b2_bucket != "" && var.b2_endpoint != "" ? {
@@ -28,7 +24,7 @@ data "aws_region" "current" {}
 
 # Reference existing S3 bucket (created manually)
 data "aws_s3_bucket" "mfa_backups" {
-  bucket = local.backup_bucket_name
+  bucket = var.backup_bucket_name
 }
 
 # Archive Lambda functions
@@ -198,11 +194,11 @@ resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
         ]
         Resource = concat(
           # Table permissions
-          [for table_name in local.table_names :
+          [for table_name in var.dynamodb_tables :
             "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
           ],
           # Export permissions - pattern for export ARNs
-          [for table_name in local.table_names :
+          [for table_name in var.dynamodb_tables :
             "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}/export/*"
           ]
         )
@@ -251,7 +247,7 @@ resource "aws_lambda_function" "daily_backup" {
       BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
       ENVIRONMENT   = var.environment
       # Table names constructed from Terraform variables
-      DYNAMODB_TABLES = jsonencode(local.table_names)
+      DYNAMODB_TABLES = jsonencode(var.dynamodb_tables)
     }, local.b2_env_vars) # Conditionally add B2 variables
   }
 
@@ -354,10 +350,10 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
           "dynamodb:UpdateItem"
         ]
         Resource = concat(
-          [for table_name in local.table_names :
+          [for table_name in var.dynamodb_tables :
             "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
           ],
-          [for table_name in local.table_names :
+          [for table_name in var.dynamodb_tables :
             "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}/index/*"
           ]
         )
@@ -432,7 +428,7 @@ resource "aws_lambda_function" "disaster_recovery" {
       BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
       ENVIRONMENT   = var.environment
       # Pass the actual table names
-      DYNAMODB_TABLES = jsonencode(local.table_names)
+      DYNAMODB_TABLES = jsonencode(var.dynamodb_tables)
     }
   }
 
