@@ -1,15 +1,4 @@
 locals {
-  common_tags = {
-    environment       = var.environment
-    app_name          = var.app_name
-    customer          = var.customer
-    itse_app_env      = var.itse_app_env
-    itse_app_name     = var.app_name
-    itse_app_customer = var.customer
-    managed_by        = var.managed_by
-    workspace         = var.environment
-  }
-
   # B2 environment variables (only set if B2 backup is enabled and credentials are provided)
   b2_env_vars = var.b2_backup_enabled && var.b2_application_key_id != "" && var.b2_application_key != "" && var.b2_bucket != "" && var.b2_endpoint != "" ? {
     B2_APPLICATION_KEY_ID = var.b2_application_key_id
@@ -76,7 +65,7 @@ resource "aws_s3_bucket_policy" "mfa_backups" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Allow DynamoDB service to read objects for import
+
       {
         Sid    = "DynamoDBImportAccess"
         Effect = "Allow"
@@ -97,7 +86,7 @@ resource "aws_s3_bucket_policy" "mfa_backups" {
           }
         }
       },
-      # Allow Lambda functions to access the bucket
+
       {
         Sid    = "LambdaAccess"
         Effect = "Allow"
@@ -125,7 +114,7 @@ resource "aws_s3_bucket_policy" "mfa_backups" {
   })
 }
 
-# S3 Lifecycle policy - Environment-specific retention
+# S3 Lifecycle policy
 resource "aws_s3_bucket_lifecycle_configuration" "mfa_backups" {
   bucket = data.aws_s3_bucket.mfa_backups.id
 
@@ -141,17 +130,16 @@ resource "aws_s3_bucket_lifecycle_configuration" "mfa_backups" {
       days = var.backup_retention_days
     }
 
-    # Delete old versions after 7 days
+
     noncurrent_version_expiration {
       noncurrent_days = 7
     }
   }
 }
 
-# IAM Role for Daily Backup Lambda
+# IAM Role for Backup Lambda
 resource "aws_iam_role" "daily_backup_lambda_role" {
   name = "${var.app_name}-daily-backup-lambda-role-${var.environment}"
-  tags = local.common_tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -193,11 +181,11 @@ resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
           "dynamodb:DescribeContinuousBackups"
         ]
         Resource = concat(
-          # Table permissions
+
           [for table_name in var.dynamodb_tables :
             "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
           ],
-          # Export permissions - pattern for export ARNs
+
           [for table_name in var.dynamodb_tables :
             "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}/export/*"
           ]
@@ -228,27 +216,24 @@ resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
   })
 }
 
-# Daily Backup Lambda Function
+# Backup Lambda Function
 resource "aws_lambda_function" "daily_backup" {
   filename         = data.archive_file.daily_backup.output_path
   function_name    = "${var.app_name}-daily-backup-${var.environment}"
-  description      = "Daily ${var.app_name} Backup Lambda for ${var.environment}"
+  description      = "${var.app_name} Backup Lambda for ${var.environment}"
   role             = aws_iam_role.daily_backup_lambda_role.arn
   handler          = "lambda_function.lambda_handler"
   runtime          = var.lambda_runtime
   timeout          = var.lambda_timeout
   memory_size      = var.lambda_memory_size
   source_code_hash = data.archive_file.daily_backup.output_base64sha256
-  tags             = local.common_tags
 
   environment {
     variables = merge({
-      # Required environment variables
-      BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
-      ENVIRONMENT   = var.environment
-      # Table names constructed from Terraform variables
+      BACKUP_BUCKET   = data.aws_s3_bucket.mfa_backups.bucket
+      ENVIRONMENT     = var.environment
       DYNAMODB_TABLES = jsonencode(var.dynamodb_tables)
-    }, local.b2_env_vars) # Conditionally add B2 variables
+    }, local.b2_env_vars)
   }
 
   depends_on = [
@@ -257,20 +242,16 @@ resource "aws_lambda_function" "daily_backup" {
   ]
 }
 
-# CloudWatch Log Group for Daily Backup
 resource "aws_cloudwatch_log_group" "daily_backup_logs" {
   name              = "/aws/lambda/${var.app_name}-daily-backup-${var.environment}"
   retention_in_days = 30
-  tags              = local.common_tags
 }
 
-# EventBridge Rule for Daily Backup (using your configured schedule)
 resource "aws_cloudwatch_event_rule" "daily_backup_schedule" {
   count               = var.backup_schedule_enabled ? 1 : 0
   name                = "${var.app_name}-daily-backup-schedule-${var.environment}"
-  description         = "Trigger ${var.app_name} backup daily for ${var.environment}"
+  description         = "Trigger ${var.app_name} backup for ${var.environment}"
   schedule_expression = var.backup_schedule
-  tags                = local.common_tags
 }
 
 resource "aws_cloudwatch_event_target" "daily_backup_target" {
@@ -292,7 +273,6 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 # IAM Role for Disaster Recovery Lambda
 resource "aws_iam_role" "disaster_recovery_lambda_role" {
   name = "${var.app_name}-disaster-recovery-lambda-role-${var.environment}"
-  tags = local.common_tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -308,7 +288,7 @@ resource "aws_iam_role" "disaster_recovery_lambda_role" {
   })
 }
 
-# Enhanced disaster recovery Lambda policy with import permissions
+# Disaster recovery Lambda policy
 resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
   name = "${var.app_name}-disaster-recovery-lambda-policy-${var.environment}"
   role = aws_iam_role.disaster_recovery_lambda_role.id
@@ -327,7 +307,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
         ]
         Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
       },
-      # Table-specific DynamoDB permissions
+
       {
         Effect = "Allow"
         Action = [
@@ -358,7 +338,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
           ]
         )
       },
-      # DynamoDB Import Operations (requires Resource = "*")
+
       {
         Effect = "Allow"
         Action = [
@@ -368,7 +348,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
         ]
         Resource = "*"
       },
-      # Global Table Operations
+
       {
         Effect = "Allow"
         Action = [
@@ -379,7 +359,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
         Resource = "*"
       },
 
-      # S3 permissions for reading backups
+
       {
         Effect = "Allow"
         Action = [
@@ -393,7 +373,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
           "${data.aws_s3_bucket.mfa_backups.arn}/*"
         ]
       },
-      # CloudWatch for monitoring import progress
+
       {
         Effect = "Allow"
         Action = [
@@ -421,7 +401,6 @@ resource "aws_lambda_function" "disaster_recovery" {
   timeout          = var.lambda_timeout
   memory_size      = var.lambda_memory_size
   source_code_hash = data.archive_file.disaster_recovery.output_base64sha256
-  tags             = local.common_tags
 
   environment {
     variables = {
@@ -442,5 +421,4 @@ resource "aws_lambda_function" "disaster_recovery" {
 resource "aws_cloudwatch_log_group" "disaster_recovery_logs" {
   name              = "/aws/lambda/${var.app_name}-disaster-recovery-${var.environment}"
   retention_in_days = 30
-  tags              = local.common_tags
 }

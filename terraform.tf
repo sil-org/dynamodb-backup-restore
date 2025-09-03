@@ -25,4 +25,14 @@ provider "aws" {
   access_key = var.aws_access_key_id
   secret_key = var.aws_secret_access_key
   region     = var.aws_region
+
+  default_tags {
+    tags = {
+      itse_app_env      = var.itse_app_env
+      itse_app_name     = var.app_name
+      itse_app_customer = var.customer
+      managed_by        = "terraform"
+      workspace         = terraform.workspace
+    }
+  }
 }

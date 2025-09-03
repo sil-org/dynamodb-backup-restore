@@ -1,5 +1,5 @@
 variable "environment" {
-  description = "Environment name (dev or prod) - Set in Terraform Cloud workspace"
+  description = "Environment name- HCP Terraform"
   type        = string
 }
 

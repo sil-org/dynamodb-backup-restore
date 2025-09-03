@@ -62,7 +62,7 @@ def get_tables_to_restore():
 
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse DYNAMODB_TABLES: {e}")
-        raise ValueError(f"Invalid DYNAMODB_TABLES format: {e}")
+        raise ValueError(f"Invalid DYNAMODB_TABLES format: {e}") from e
     except Exception as e:
         logger.error(f"Failed to get tables to restore: {str(e)}")
         raise
