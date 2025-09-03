@@ -405,7 +405,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
             "cloudwatch:namespace" = "${var.app_name}/DisasterRecovery"
           }
         }
-      }
+      },
     ]
   })
 }
