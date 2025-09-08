@@ -23,12 +23,12 @@ def get_storage_client(mode='s3'):
             return boto3.client(
                 's3',
                 endpoint_url='https://s3.us-west-000.backblazeb2.com',
-                aws_access_key_id=os.environ['B2_KEY_ID'],
-                aws_secret_access_key=os.environ['B2_APP_KEY']
+                aws_access_key_id=os.environ['B2_APPLICATION_KEY_ID'],
+                aws_secret_access_key=os.environ['B2_APPLICATION_KEY']
             )
         except KeyError as e:
             logger.error(f"B2 credentials not found: {e}")
-            raise Exception(f"B2 mode requires B2_KEY_ID and B2_APP_KEY environment variables")
+            raise Exception(f"B2 mode requires B2_APPLICATION_KEY_ID and B2_APPLICATION_KEY environment variables")
     return boto3.client('s3')
 
 
