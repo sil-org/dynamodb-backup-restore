@@ -112,3 +112,9 @@ variable "lambda_memory_size" {
   type        = number
   default     = 128
 }
+
+variable "restore_storage_mode" {
+  description = "Storage mode for disaster recovery (s3 or b2)"
+  type        = string
+  default     = "s3"
+}
