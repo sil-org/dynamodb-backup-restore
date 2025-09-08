@@ -30,7 +30,7 @@ provider "aws" {
     tags = {
       itse_app_env      = var.itse_app_env
       itse_app_name     = var.app_name
-      itse_app_customer = var.customer
+      itse_app_customer = var.itse_app_customer
       managed_by        = "terraform"
       workspace         = terraform.workspace
     }

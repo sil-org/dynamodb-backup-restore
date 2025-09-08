@@ -15,7 +15,21 @@ logger.setLevel(logging.INFO)
 
 # Initialize AWS clients
 dynamodb = boto3.client('dynamodb')
-s3 = boto3.client('s3')
+
+def get_storage_client(mode='s3'):
+    """Get storage client based on mode"""
+    if mode.lower() == 'b2':
+        try:
+            return boto3.client(
+                's3',
+                endpoint_url='https://s3.us-west-000.backblazeb2.com',
+                aws_access_key_id=os.environ['B2_KEY_ID'],
+                aws_secret_access_key=os.environ['B2_APP_KEY']
+            )
+        except KeyError as e:
+            logger.error(f"B2 credentials not found: {e}")
+            raise Exception(f"B2 mode requires B2_KEY_ID and B2_APP_KEY environment variables")
+    return boto3.client('s3')
 
 
 def decimal_default(obj):
@@ -37,9 +51,8 @@ def validate_environment():
     if missing_vars:
         raise Exception(f"Missing required environment variables: {', '.join(missing_vars)}")
 
-    # Get S3 prefix from environment or use default
-    s3_prefix = os.environ.get('S3_EXPORTS_PREFIX', 'native-exports')  # Changed default to native-exports
-
+    s3_prefix = os.environ.get('S3_EXPORTS_PREFIX', 'native-exports')
+    
     return {
         'backup_bucket': os.environ['BACKUP_BUCKET'],
         'environment': os.environ['ENVIRONMENT'],
@@ -68,49 +81,28 @@ def get_tables_to_restore():
         raise
 
 
-def get_available_backups(s3_bucket, s3_prefix='native-exports'):
+def get_available_backups(s3_client, s3_bucket, s3_prefix='native-exports'):
     """
-    Get list of available backup dates from S3
+    Get list of available backup dates
     Returns dates in descending order (newest first)
     """
     try:
-        logger.info(f"Scanning for backups in s3://{s3_bucket}/{s3_prefix}/")
+        logger.info(f"Scanning for backups in {s3_bucket}/{s3_prefix}/")
 
-        response = s3.list_objects_v2(
+        response = s3_client.list_objects_v2(
             Bucket=s3_bucket,
             Prefix=f'{s3_prefix}/',
             Delimiter='/'
         )
 
         backup_dates = []
-        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')  # YYYY-MM-DD format
-
         for prefix in response.get('CommonPrefixes', []):
-            # Extract date from prefix like 'native-exports/2025-07-02/'
-            path_parts = prefix['Prefix'].rstrip('/').split('/')
-            if len(path_parts) >= 2:
-                date_part = path_parts[-1]
-                if date_pattern.match(date_part):
-                    backup_dates.append(date_part)
+            date_part = prefix['Prefix'].rstrip('/').split('/')[-1]
+            if len(date_part) == 10 and date_part.count('-') == 2:  # YYYY-MM-DD
+                backup_dates.append(date_part)
 
-        if not backup_dates:
-            logger.warning(f"No backup dates found in expected format (YYYY-MM-DD) under {s3_prefix}/")
-
-            # Try to list what's actually there for debugging
-            response = s3.list_objects_v2(
-                Bucket=s3_bucket,
-                Prefix=f'{s3_prefix}/',
-                MaxKeys=10
-            )
-
-            logger.info(f"Available objects under {s3_prefix}/:")
-            for obj in response.get('Contents', []):
-                logger.info(f"  {obj['Key']}")
-
-        # Return sorted by date descending (newest first)
         sorted_dates = sorted(backup_dates, reverse=True)
-        logger.info(f"Found {len(sorted_dates)} backup dates: {sorted_dates[:5]}")  # Show first 5
-
+        logger.info(f"Found {len(sorted_dates)} backup dates")
         return sorted_dates
 
     except Exception as e:
@@ -118,38 +110,26 @@ def get_available_backups(s3_bucket, s3_prefix='native-exports'):
         raise
 
 
-def get_backup_manifest(s3_bucket, backup_date, s3_prefix='native-exports'):
+def get_backup_manifest(s3_client, s3_bucket, backup_date, s3_prefix='native-exports'):
     """
     Get backup manifest for a specific date
     """
     try:
         manifest_key = f"{s3_prefix}/{backup_date}/manifest.json"
-
-        logger.info(f"Fetching manifest: s3://{s3_bucket}/{manifest_key}")
+        logger.info(f"Fetching manifest: {manifest_key}")
 
         try:
-            response = s3.get_object(Bucket=s3_bucket, Key=manifest_key)
-            manifest_content = response['Body'].read().decode('utf-8')
-            manifest = json.loads(manifest_content)
+            response = s3_client.get_object(Bucket=s3_bucket, Key=manifest_key)
+            manifest = json.loads(response['Body'].read().decode('utf-8'))
 
-            # Validate basic manifest structure
-            if not isinstance(manifest, dict):
-                raise ValueError("Manifest is not a valid JSON object")
+            if not isinstance(manifest, dict) or 'exports' not in manifest:
+                raise ValueError("Invalid manifest structure")
 
-            if 'exports' not in manifest:
-                raise ValueError("Manifest missing 'exports' field")
-
-            if not isinstance(manifest['exports'], list):
-                raise ValueError("Manifest 'exports' field is not a list")
-
-            logger.info(f" Found valid manifest with {len(manifest.get('exports', []))} exports")
+            logger.info(f"Found valid manifest with {len(manifest.get('exports', []))} exports")
             return manifest
 
-        except s3.exceptions.NoSuchKey:
-            logger.error(f" Manifest not found: {manifest_key}")
-            return None
-        except json.JSONDecodeError as e:
-            logger.error(f" Invalid JSON in manifest: {str(e)}")
+        except s3_client.exceptions.NoSuchKey:
+            logger.error(f"Manifest not found: {manifest_key}")
             return None
 
     except Exception as e:
@@ -179,7 +159,7 @@ def validate_export_info(export_info):
     return True
 
 
-def get_export_data_files(s3_bucket, export_info):
+def get_export_data_files(s3_client, s3_bucket, export_info):
     """
     Get list of all data files for an export with robust S3 structure detection
     """
@@ -199,7 +179,7 @@ def get_export_data_files(s3_bucket, export_info):
         try:
             logger.info(f"Trying standard structure: {data_prefix}")
 
-            response = s3.list_objects_v2(
+            response = s3_client.list_objects_v2(
                 Bucket=s3_bucket,
                 Prefix=data_prefix,
                 Delimiter='/'
@@ -223,7 +203,7 @@ def get_export_data_files(s3_bucket, export_info):
                 for data_path in possible_data_paths:
                     logger.info(f"Checking for data files in: {data_path}")
 
-                    response = s3.list_objects_v2(Bucket=s3_bucket, Prefix=data_path)
+                    response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=data_path)
 
                     data_files = []
                     for obj in response.get('Contents', []):
@@ -241,7 +221,7 @@ def get_export_data_files(s3_bucket, export_info):
         logger.info(f"Trying direct files under: {s3_prefix}")
 
         try:
-            response = s3.list_objects_v2(Bucket=s3_bucket, Prefix=f"{s3_prefix}/")
+            response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=f"{s3_prefix}/")
 
             data_files = []
             for obj in response.get('Contents', []):
@@ -259,7 +239,7 @@ def get_export_data_files(s3_bucket, export_info):
         logger.info(f"Trying recursive search under: {s3_prefix}")
 
         try:
-            paginator = s3.get_paginator('list_objects_v2')
+            paginator = s3_client.get_paginator('list_objects_v2')
             pages = paginator.paginate(Bucket=s3_bucket, Prefix=f"{s3_prefix}/")
 
             data_files = []
@@ -280,7 +260,7 @@ def get_export_data_files(s3_bucket, export_info):
 
         # List what's actually there for debugging
         try:
-            response = s3.list_objects_v2(
+            response = s3_client.list_objects_v2(
                 Bucket=s3_bucket,
                 Prefix=f"{s3_prefix}/",
                 MaxKeys=20
@@ -300,12 +280,12 @@ def get_export_data_files(s3_bucket, export_info):
         raise
 
 
-def parse_dynamodb_json_file(s3_bucket, s3_key):
+def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
     """Parse a single DynamoDB JSON export file from S3"""
     try:
         logger.debug(f"Parsing file: {s3_key}")
 
-        response = s3.get_object(Bucket=s3_bucket, Key=s3_key)
+        response = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
 
         # Handle gzipped files
         if s3_key.endswith('.gz'):
@@ -536,7 +516,7 @@ def batch_write_items_to_table(table_name, items, max_workers=5):
     return items_written, failed_items
 
 
-def restore_table_from_s3_export(table_name, export_info, s3_bucket, clear_existing=False, max_workers=5):
+def restore_table_from_s3_export(s3_client, table_name, export_info, s3_bucket, clear_existing=False, max_workers=5):
     """
     Restore table data from S3 export using batch write operations
     """
@@ -552,7 +532,7 @@ def restore_table_from_s3_export(table_name, export_info, s3_bucket, clear_exist
                 raise Exception("Failed to clear existing table data")
 
         # Get all data files for this export
-        data_files = get_export_data_files(s3_bucket, export_info)
+        data_files = get_export_data_files(s3_client, s3_bucket, export_info)
         if not data_files:
             raise Exception("No data files found for export")
 
@@ -565,7 +545,7 @@ def restore_table_from_s3_export(table_name, export_info, s3_bucket, clear_exist
             logger.info(f" Processing file {i + 1}/{len(data_files)}: {data_file}")
 
             # Parse items from this file
-            items = parse_dynamodb_json_file(s3_bucket, data_file)
+            items = parse_dynamodb_json_file(s3_client, s3_bucket, data_file)
             if not items:
                 logger.warning(f"No items found in {data_file}")
                 continue
@@ -647,11 +627,16 @@ def lambda_handler(event, context):
         dry_run = event.get('dry_run', False)
         clear_existing_data = event.get('clear_existing_data', False)
         max_workers = event.get('max_workers', 5)
+        restore_mode = event.get('mode', 's3').lower()
+        
+        # Get appropriate storage client
+        s3_client = get_storage_client(restore_mode)
 
         logger.info(f"  Configuration:")
         logger.info(f"  Environment: {environment}")
-        logger.info(f"  S3 Bucket: {s3_bucket}")
-        logger.info(f"  S3 Prefix: {s3_prefix}")  # Log the S3 prefix being used
+        logger.info(f"  Storage Mode: {restore_mode.upper()}")
+        logger.info(f"  Bucket: {s3_bucket}")
+        logger.info(f"  Prefix: {s3_prefix}")
         logger.info(f"  Backup Date: {backup_date}")
         logger.info(f"  Specific Tables: {specific_tables or 'All available'}")
         logger.info(f"  Dry Run: {dry_run}")
@@ -680,14 +665,14 @@ def lambda_handler(event, context):
 
         # Get backup date if 'latest'
         if backup_date == 'latest':
-            available_backups = get_available_backups(s3_bucket, s3_prefix)
+            available_backups = get_available_backups(s3_client, s3_bucket, s3_prefix)
             if not available_backups:
-                raise Exception(f"No backups found in s3://{s3_bucket}/{s3_prefix}/")
+                raise Exception(f"No backups found in {s3_bucket}/{s3_prefix}/")
             backup_date = available_backups[0]
             logger.info(f" Using latest backup from: {backup_date}")
 
         # Get and validate backup manifest
-        manifest = get_backup_manifest(s3_bucket, backup_date, s3_prefix)
+        manifest = get_backup_manifest(s3_client, s3_bucket, backup_date, s3_prefix)
         if not manifest:
             raise Exception(f"Could not find or parse backup manifest for {backup_date}")
 
@@ -726,13 +711,13 @@ def lambda_handler(event, context):
                 if table_name in available_exports:
                     export_info = available_exports[table_name]
                     try:
-                        data_files = get_export_data_files(s3_bucket, export_info)
+                        data_files = get_export_data_files(s3_client, s3_bucket, export_info)
 
                         # Calculate estimated restore size
                         total_file_size = 0
                         for file_key in data_files[:5]:  # Sample first 5 files
                             try:
-                                response = s3.head_object(Bucket=s3_bucket, Key=file_key)
+                                response = s3_client.head_object(Bucket=s3_bucket, Key=file_key)
                                 total_file_size += response['ContentLength']
                             except Exception:
                                 pass
@@ -808,6 +793,7 @@ def lambda_handler(event, context):
 
             # Start batch write restore
             result = restore_table_from_s3_export(
+                s3_client,
                 table_name,
                 export_info,
                 s3_bucket,

@@ -1,6 +1,4 @@
 variable "environment" {
-  description = "Environment name- HCP Terraform"
-  type        = string
 }
 
 variable "itse_app_env" {
@@ -10,26 +8,14 @@ variable "itse_app_env" {
 }
 
 variable "app_name" {
-  description = "Application name used in resource naming"
-  type        = string
   default     = "mfa-api"
 }
 
-variable "customer" {
-  description = "Customer identifier for tagging"
-  type        = string
+variable "itse_app_customer" {
   default     = "shared"
 }
 
-variable "managed_by" {
-  description = "Tool managing the infrastructure"
-  type        = string
-  default     = "terraform"
-}
-
 variable "aws_region" {
-  description = "AWS region - Set in Terraform Cloud workspace"
-  type        = string
   default     = "us-east-1"
 }
 
@@ -52,13 +38,13 @@ variable "dynamodb_tables" {
 }
 
 variable "backup_retention_days" {
-  description = "Number of days to retain backups - Set in Terraform Cloud workspace"
+  description = "Number of days to retain backups"
   type        = number
   default     = 31
 }
 
 variable "lambda_timeout" {
-  description = "Lambda function timeout in seconds - Set in Terraform Cloud workspace"
+  description = "Lambda function timeout in seconds"
   type        = number
   default     = 900
 }
@@ -70,7 +56,7 @@ variable "backup_schedule" {
 }
 
 variable "backup_schedule_enabled" {
-  description = "Enable or disable the automatic backup schedule (useful for maintenance or cost control)"
+  description = "Enable or disable the automatic backup schedule"
   type        = bool
   default     = true
 }
@@ -110,7 +96,7 @@ variable "b2_backup_enabled" {
 
 # S3 bucket configuration
 variable "backup_bucket_name" {
-  description = "Name of existing S3 bucket for backups (created manually outside Terraform)"
+  description = "S3 bucket for backups"
   type        = string
 }
 
