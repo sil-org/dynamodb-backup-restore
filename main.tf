@@ -6,6 +6,12 @@ locals {
     B2_BUCKET             = var.b2_bucket
     B2_ENDPOINT           = var.b2_endpoint
   } : {}
+
+  short_env_names = {
+    "staging"  = "stg"
+    "production" = "prod"
+  }
+  short_env_name = local.short_env_names[var.environment]
 }
 
 data "aws_caller_identity" "current" {}
@@ -21,7 +27,7 @@ data "archive_file" "daily_backup" {
   type             = "zip"
   source_dir       = "${path.module}/lambda/daily_backup"
   output_file_mode = "0666"
-  output_path      = "daily_backup_${var.environment}.zip"
+  output_path      = "daily_backup_${local.short_env_name}.zip"
   excludes         = ["*.pyc", "__pycache__"]
 }
 
@@ -29,7 +35,7 @@ data "archive_file" "disaster_recovery" {
   type             = "zip"
   source_dir       = "${path.module}/lambda/disaster_recovery"
   output_file_mode = "0666"
-  output_path      = "disaster_recovery_${var.environment}.zip"
+  output_path      = "disaster_recovery_${local.short_env_name}.zip"
   excludes         = ["*.pyc", "__pycache__"]
 }
 
@@ -117,7 +123,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "mfa_backups" {
   bucket = data.aws_s3_bucket.mfa_backups.id
 
   rule {
-    id     = "${var.app_name}_backup_lifecycle_${var.environment}"
+    id     = "${var.app_name}_backup_lifecycle_${local.short_env_name}"
     status = "Enabled"
 
     filter {
@@ -132,7 +138,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "mfa_backups" {
 
 # IAM Role for Backup Lambda
 resource "aws_iam_role" "daily_backup_lambda_role" {
-  name = "${var.app_name}-daily-backup-lambda-role-${var.environment}"
+  name = "${var.app_name}-daily-backup-lambda-role-${local.short_env_name}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -149,7 +155,7 @@ resource "aws_iam_role" "daily_backup_lambda_role" {
 }
 
 resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
-  name = "${var.app_name}-daily-backup-lambda-policy-${var.environment}"
+  name = "${var.app_name}-daily-backup-lambda-policy-${local.short_env_name}"
   role = aws_iam_role.daily_backup_lambda_role.id
 
   policy = jsonencode({
@@ -212,7 +218,7 @@ resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
 # Backup Lambda Function
 resource "aws_lambda_function" "daily_backup" {
   filename         = data.archive_file.daily_backup.output_path
-  function_name    = "${var.app_name}-daily-backup-${var.environment}"
+  function_name    = "${var.app_name}-daily-backup-${local.short_env_name}"
   description      = "${var.app_name} Backup Lambda for ${var.environment}"
   role             = aws_iam_role.daily_backup_lambda_role.arn
   handler          = "lambda_function.lambda_handler"
@@ -224,7 +230,7 @@ resource "aws_lambda_function" "daily_backup" {
   environment {
     variables = merge({
       BACKUP_BUCKET   = data.aws_s3_bucket.mfa_backups.bucket
-      ENVIRONMENT     = var.environment
+      ENVIRONMENT     = local.short_env_name
       DYNAMODB_TABLES = jsonencode(var.dynamodb_tables)
     }, local.b2_env_vars)
   }
@@ -236,13 +242,13 @@ resource "aws_lambda_function" "daily_backup" {
 }
 
 resource "aws_cloudwatch_log_group" "daily_backup_logs" {
-  name              = "/aws/lambda/${var.app_name}-daily-backup-${var.environment}"
+  name              = "/aws/lambda/${var.app_name}-daily-backup-${local.short_env_name}"
   retention_in_days = 30
 }
 
 resource "aws_cloudwatch_event_rule" "daily_backup_schedule" {
   count               = var.backup_schedule_enabled ? 1 : 0
-  name                = "${var.app_name}-daily-backup-schedule-${var.environment}"
+  name                = "${var.app_name}-daily-backup-schedule-${local.short_env_name}"
   description         = "Trigger ${var.app_name} backup for ${var.environment}"
   schedule_expression = var.backup_schedule
 }
@@ -265,7 +271,7 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 
 # IAM Role for Disaster Recovery Lambda
 resource "aws_iam_role" "disaster_recovery_lambda_role" {
-  name = "${var.app_name}-disaster-recovery-lambda-role-${var.environment}"
+  name = "${var.app_name}-disaster-recovery-lambda-role-${local.short_env_name}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -283,7 +289,7 @@ resource "aws_iam_role" "disaster_recovery_lambda_role" {
 
 # Disaster recovery Lambda policy
 resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
-  name = "${var.app_name}-disaster-recovery-lambda-policy-${var.environment}"
+  name = "${var.app_name}-disaster-recovery-lambda-policy-${local.short_env_name}"
   role = aws_iam_role.disaster_recovery_lambda_role.id
 
   policy = jsonencode({
@@ -386,7 +392,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
 # Disaster Recovery Lambda Function
 resource "aws_lambda_function" "disaster_recovery" {
   filename         = data.archive_file.disaster_recovery.output_path
-  function_name    = "${var.app_name}-disaster-recovery-${var.environment}"
+  function_name    = "${var.app_name}-disaster-recovery-${local.short_env_name}"
   description      = "${var.app_name} Disaster Recovery Lambda for ${var.environment}"
   role             = aws_iam_role.disaster_recovery_lambda_role.arn
   handler          = "lambda_function.lambda_handler"
@@ -398,7 +404,7 @@ resource "aws_lambda_function" "disaster_recovery" {
   environment {
     variables = merge({
       BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
-      ENVIRONMENT   = var.environment
+      ENVIRONMENT   = local.short_env_name
       DYNAMODB_TABLES = jsonencode(var.dynamodb_tables)
     }, var.restore_storage_mode == "b2" ? {
       B2_APPLICATION_KEY_ID = var.b2_application_key_id
@@ -416,6 +422,6 @@ resource "aws_lambda_function" "disaster_recovery" {
 
 # CloudWatch Log Group for Disaster Recovery
 resource "aws_cloudwatch_log_group" "disaster_recovery_logs" {
-  name              = "/aws/lambda/${var.app_name}-disaster-recovery-${var.environment}"
+  name              = "/aws/lambda/${var.app_name}-disaster-recovery-${local.short_env_name}"
   retention_in_days = 30
 }
