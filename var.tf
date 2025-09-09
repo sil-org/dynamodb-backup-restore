@@ -11,11 +11,13 @@ variable "itse_app_env" {
 }
 
 variable "app_name" {
-  default     = "mfa-api"
+  description = "Application name"
+  type        = string
 }
 
 variable "itse_app_customer" {
-  default     = "shared"
+  description = "ITSE application customer"
+  type        = string
 }
 
 variable "aws_region" {
@@ -37,7 +39,6 @@ variable "aws_secret_access_key" {
 variable "dynamodb_tables" {
   description = "List of complete DynamoDB table names to backup"
   type        = list(string)
-  default     = ["mfa-api_prod_u2f_global", "mfa-api_prod_totp_global", "mfa-api_prod_api-key_global"]
 }
 
 variable "backup_retention_days" {
