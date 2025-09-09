@@ -1,6 +1,6 @@
 locals {
-  # B2 environment variables (only set if B2 backup is enabled and credentials are provided)
-  b2_env_vars = var.b2_backup_enabled && var.b2_application_key_id != "" && var.b2_application_key != "" && var.b2_bucket != "" && var.b2_endpoint != "" ? {
+  # B2 environment variables (only set if B2 backup is enabled)
+  b2_env_vars = var.b2_backup_enabled ? {
     B2_APPLICATION_KEY_ID = var.b2_application_key_id
     B2_APPLICATION_KEY    = var.b2_application_key
     B2_BUCKET             = var.b2_bucket
