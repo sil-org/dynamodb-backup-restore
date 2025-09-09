@@ -4,10 +4,9 @@ variable "environment" {
   default     = ""
 }
 
-variable "itse_app_env" {
-  description = "The application environment, such as `production` or `staging`"
+variable "app_name" {
+  description = "Application name"
   type        = string
-  default     = ""
 }
 
 variable "itse_app_customer" {
