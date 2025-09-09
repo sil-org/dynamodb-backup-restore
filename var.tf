@@ -10,11 +10,6 @@ variable "itse_app_env" {
   default     = ""
 }
 
-variable "app_name" {
-  description = "Application name"
-  type        = string
-}
-
 variable "itse_app_customer" {
   description = "ITSE application customer"
   type        = string
