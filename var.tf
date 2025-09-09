@@ -44,7 +44,7 @@ variable "dynamodb_tables" {
 variable "backup_retention_days" {
   description = "Number of days to retain backups"
   type        = number
-  default     = 31
+  default     = 365
 }
 
 variable "lambda_timeout" {
