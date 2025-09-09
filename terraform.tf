@@ -5,7 +5,7 @@ terraform {
     organization = "gtis"
 
     workspaces {
-      tags = ["app:mfa-backup-dynamodb"]
+      tags = ["app:dynamodb-backup-restore"]
     }
   }
 
