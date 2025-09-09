@@ -125,12 +125,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "mfa_backups" {
       prefix = "native-exports/"
     }
 
-    expiration {
-      days = var.backup_retention_days
-    }
-
     noncurrent_version_expiration {
-      noncurrent_days = 7
+      noncurrent_days = var.backup_retention_days
     }
   }
 }

@@ -1,8 +1,11 @@
 variable "environment" {
+  description = "The application environment, such as `production` or `staging`"
+  type        = string
+  default     = ""
 }
 
 variable "itse_app_env" {
-  description = "ITSE app environment"
+  description = "The application environment, such as `production` or `staging`"
   type        = string
   default     = ""
 }
