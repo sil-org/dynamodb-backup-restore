@@ -57,7 +57,6 @@ resource "aws_s3_bucket_public_access_block" "mfa_backups" {
   restrict_public_buckets = true
 }
 
-# S3 bucket policy to allow DynamoDB service access for imports
 resource "aws_s3_bucket_policy" "mfa_backups" {
   bucket = data.aws_s3_bucket.mfa_backups.id
 
