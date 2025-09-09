@@ -31,7 +31,7 @@ variable "aws_secret_access_key" {
 }
 
 variable "dynamodb_tables" {
-  description = "List of complete DynamoDB table names to backup"
+  description = "List of complete DynamoDB table names to backup. Example (HCL): `["table1", "table2"]`"
   type        = list(string)
 }
 
