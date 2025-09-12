@@ -172,55 +172,7 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
 
         logger.info(f"Looking for data files for {table_name} under: {s3_prefix}")
 
-        # Strategy 1: Table-specific structure (B2 format)
-        # Check if s3_prefix contains table name, if not, add it
-        if table_name not in s3_prefix:
-            table_data_prefix = f"{s3_prefix}/{table_name}/AWSDynamoDB/"
-        else:
-            table_data_prefix = f"{s3_prefix}/AWSDynamoDB/"
-
-        try:
-            logger.info(f"Trying table-specific structure: {table_data_prefix}")
-
-            response = s3_client.list_objects_v2(
-                Bucket=s3_bucket,
-                Prefix=table_data_prefix,
-                Delimiter='/'
-            )
-
-            export_dirs = [prefix['Prefix'] for prefix in response.get('CommonPrefixes', [])]
-
-            if export_dirs:
-                # Use the most recent export directory (highest timestamp)
-                export_dirs.sort(reverse=True)
-                export_dir = export_dirs[0]
-
-                logger.info(f"Found export directory: {export_dir}")
-
-                # Look for data files in multiple possible locations
-                possible_data_paths = [
-                    f"{export_dir}data/",  # Standard location
-                    export_dir,  # Files directly in export dir
-                ]
-
-                for data_path in possible_data_paths:
-                    logger.info(f"Checking for data files in: {data_path}")
-
-                    response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=data_path)
-
-                    data_files = []
-                    for obj in response.get('Contents', []):
-                        if obj['Key'].endswith('.json.gz') or obj['Key'].endswith('.json'):
-                            data_files.append(obj['Key'])
-
-                    if data_files:
-                        logger.info(f" Found {len(data_files)} data files in {data_path}")
-                        return data_files
-
-        except Exception as e:
-            logger.warning(f"Table-specific structure failed: {str(e)}")
-
-        # Strategy 2: Standard DynamoDB export structure
+        # Strategy 1: Standard DynamoDB export structure
         # s3_prefix/AWSDynamoDB/{export-id}/data/*.json.gz
         data_prefix = f"{s3_prefix}/AWSDynamoDB/"
 
@@ -265,7 +217,7 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         except Exception as e:
             logger.warning(f"Standard structure failed: {str(e)}")
 
-        # Strategy 3: Files directly under s3_prefix
+        # Strategy 2: Files directly under s3_prefix
         logger.info(f"Trying direct files under: {s3_prefix}")
 
         try:
@@ -283,7 +235,7 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         except Exception as e:
             logger.warning(f"Direct file search failed: {str(e)}")
 
-        # Strategy 4: Recursive search under s3_prefix
+        # Strategy 3: Recursive search under s3_prefix
         logger.info(f"Trying recursive search under: {s3_prefix}")
 
         try:
