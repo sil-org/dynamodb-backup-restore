@@ -22,7 +22,7 @@ def get_storage_client(mode='s3'):
         try:
             return boto3.client(
                 's3',
-                endpoint_url='https://s3.us-west-000.backblazeb2.com',
+                endpoint_url='https://s3.us-west-004.backblazeb2.com',
                 aws_access_key_id=os.environ['B2_APPLICATION_KEY_ID'],
                 aws_secret_access_key=os.environ['B2_APPLICATION_KEY']
             )
@@ -172,7 +172,55 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
 
         logger.info(f"Looking for data files for {table_name} under: {s3_prefix}")
 
-        # Strategy 1: Standard DynamoDB export structure
+        # Strategy 1: Table-specific structure (B2 format)
+        # Check if s3_prefix contains table name, if not, add it
+        if table_name not in s3_prefix:
+            table_data_prefix = f"{s3_prefix}/{table_name}/AWSDynamoDB/"
+        else:
+            table_data_prefix = f"{s3_prefix}/AWSDynamoDB/"
+
+        try:
+            logger.info(f"Trying table-specific structure: {table_data_prefix}")
+
+            response = s3_client.list_objects_v2(
+                Bucket=s3_bucket,
+                Prefix=table_data_prefix,
+                Delimiter='/'
+            )
+
+            export_dirs = [prefix['Prefix'] for prefix in response.get('CommonPrefixes', [])]
+
+            if export_dirs:
+                # Use the most recent export directory (highest timestamp)
+                export_dirs.sort(reverse=True)
+                export_dir = export_dirs[0]
+
+                logger.info(f"Found export directory: {export_dir}")
+
+                # Look for data files in multiple possible locations
+                possible_data_paths = [
+                    f"{export_dir}data/",  # Standard location
+                    export_dir,  # Files directly in export dir
+                ]
+
+                for data_path in possible_data_paths:
+                    logger.info(f"Checking for data files in: {data_path}")
+
+                    response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=data_path)
+
+                    data_files = []
+                    for obj in response.get('Contents', []):
+                        if obj['Key'].endswith('.json.gz') or obj['Key'].endswith('.json'):
+                            data_files.append(obj['Key'])
+
+                    if data_files:
+                        logger.info(f" Found {len(data_files)} data files in {data_path}")
+                        return data_files
+
+        except Exception as e:
+            logger.warning(f"Table-specific structure failed: {str(e)}")
+
+        # Strategy 2: Standard DynamoDB export structure
         # s3_prefix/AWSDynamoDB/{export-id}/data/*.json.gz
         data_prefix = f"{s3_prefix}/AWSDynamoDB/"
 
@@ -217,7 +265,7 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         except Exception as e:
             logger.warning(f"Standard structure failed: {str(e)}")
 
-        # Strategy 2: Files directly under s3_prefix
+        # Strategy 3: Files directly under s3_prefix
         logger.info(f"Trying direct files under: {s3_prefix}")
 
         try:
@@ -235,7 +283,7 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         except Exception as e:
             logger.warning(f"Direct file search failed: {str(e)}")
 
-        # Strategy 3: Recursive search under s3_prefix
+        # Strategy 4: Recursive search under s3_prefix
         logger.info(f"Trying recursive search under: {s3_prefix}")
 
         try:
@@ -609,15 +657,18 @@ def restore_table_from_s3_export(s3_client, table_name, export_info, s3_bucket, 
 
 def lambda_handler(event, context):
     """
-    Main handler for batch write restoration from S3 exports
+    Main handler for batch write restoration from Backup exports in S3 or B2
     """
     start_time = datetime.now()
-    logger.info(f" Starting MFA disaster recovery from S3 exports at {start_time}")
+    
+    restore_mode = event.get('mode', 's3').lower()
+    storage_type = 'B2' if restore_mode == 'b2' else 'S3'
+    
+    logger.info(f" Starting MFA disaster recovery from {storage_type} exports at {start_time}")
 
     try:
         # Validate environment
         env_config = validate_environment()
-        s3_bucket = env_config['backup_bucket']
         environment = env_config['environment']
         s3_prefix = env_config['s3_prefix']  # Will be 'native-exports' by default
 
@@ -627,10 +678,15 @@ def lambda_handler(event, context):
         dry_run = event.get('dry_run', False)
         clear_existing_data = event.get('clear_existing_data', False)
         max_workers = event.get('max_workers', 5)
-        restore_mode = event.get('mode', 's3').lower()
         
-        # Get appropriate storage client
         s3_client = get_storage_client(restore_mode)
+        
+        if restore_mode == 'b2':
+            s3_bucket = os.environ.get('B2_BUCKET_NAME')
+            if not s3_bucket:
+                raise Exception("B2 mode requires B2_BUCKET_NAME environment variable")
+        else:
+            s3_bucket = env_config['backup_bucket']
 
         logger.info(f"  Configuration:")
         logger.info(f"  Environment: {environment}")

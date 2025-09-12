@@ -353,8 +353,7 @@ def copy_to_backblaze(
             s3_key = obj['Key']
             file_size = obj['Size']
 
-            # Create the same key structure in Backblaze with environment prefix
-            backblaze_key = f"{environment}/{s3_key}"
+            backblaze_key = s3_key
 
             try:
                 # Get object from S3
