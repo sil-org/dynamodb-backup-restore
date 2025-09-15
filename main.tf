@@ -3,7 +3,7 @@ locals {
   b2_env_vars = var.b2_backup_enabled ? {
     B2_APPLICATION_KEY_ID = var.b2_application_key_id
     B2_APPLICATION_KEY    = var.b2_application_key
-    B2_BUCKET             = var.b2_bucket
+    B2_BUCKET_NAME        = var.b2_bucket
     B2_ENDPOINT           = var.b2_endpoint
   } : {}
 
@@ -409,7 +409,7 @@ resource "aws_lambda_function" "disaster_recovery" {
     }, var.restore_storage_mode == "b2" ? {
       B2_APPLICATION_KEY_ID = var.b2_application_key_id
       B2_APPLICATION_KEY    = var.b2_application_key
-      B2_BUCKET             = var.b2_bucket
+      B2_BUCKET_NAME        = var.b2_bucket
       B2_ENDPOINT           = var.b2_endpoint
     } : {})
   }
