@@ -417,7 +417,7 @@ def copy_to_backblaze(
         }
 
         manifest_content = json.dumps(copy_manifest, default=decimal_default, indent=2)
-        manifest_key = f"{environment}/native-exports/{backup_date}/backblaze-copy-manifest.json"
+        manifest_key = f"native-exports/{backup_date}/backblaze-copy-manifest.json"
 
         backblaze_client.put_object(
             Bucket=backblaze_config['bucket'],

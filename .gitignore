@@ -1,9 +1,7 @@
 # environment files typically containing secrets
 *.env
+local.env
 !example.env
-
-# test files with credentials
-test_local.py
 
 # directories created by developer tools
 .idea/

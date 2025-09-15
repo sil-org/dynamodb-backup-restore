@@ -616,7 +616,7 @@ def lambda_handler(event, context):
     restore_mode = event.get('mode', 's3').lower()
     storage_type = 'B2' if restore_mode == 'b2' else 'S3'
     
-    logger.info(f" Starting MFA disaster recovery from {storage_type} exports at {start_time}")
+    logger.info(f" Starting MFA Dynamodb restore from {storage_type} exports at {start_time}")
 
     try:
         # Validate environment
