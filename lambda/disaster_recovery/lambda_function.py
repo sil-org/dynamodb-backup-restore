@@ -636,7 +636,7 @@ def lambda_handler(event, context):
         if restore_mode == 'b2':
             s3_bucket = os.environ.get('B2_BUCKET_NAME')
             if not s3_bucket:
-                raise Exception("B2 mode requires B2_BUCKET_NAME")
+                raise Exception("B2 mode requires B2_BUCKET_NAME environment variable")
         else:
             s3_bucket = env_config['backup_bucket']
 
