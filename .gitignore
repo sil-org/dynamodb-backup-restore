@@ -1,5 +1,6 @@
 # environment files typically containing secrets
 *.env
+local.env
 !example.env
 
 # directories created by developer tools
