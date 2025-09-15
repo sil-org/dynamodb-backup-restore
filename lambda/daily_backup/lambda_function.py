@@ -266,7 +266,7 @@ def get_backblaze_config() -> dict[str, str]:
     required_vars = {
         'B2_APPLICATION_KEY_ID': 'key_id',
         'B2_APPLICATION_KEY': 'app_key',
-        'B2_BUCKET': 'bucket',
+        'B2_BUCKET_NAME': 'bucket',
         'B2_ENDPOINT': 'endpoint'
     }
     config: dict[str, str] = {}
