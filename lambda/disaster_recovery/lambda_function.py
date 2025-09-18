@@ -8,6 +8,7 @@ from decimal import Decimal
 import logging
 from datetime import datetime
 import re
+import base64
 
 # Set up logging
 logger = logging.getLogger()
@@ -37,6 +38,28 @@ def decimal_default(obj):
     if isinstance(obj, Decimal):
         return float(obj)
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
+def decode_dynamodb_binary_data(item):
+    """Recursively decode base64-encoded binary data in DynamoDB items"""
+    if isinstance(item, dict):
+        decoded_item = {}
+        for key, value in item.items():
+            if isinstance(value, dict) and 'B' in value:
+                # This is a binary attribute - decode the base64 value
+                try:
+                    decoded_item[key] = {'B': base64.b64decode(value['B'])}
+                except Exception as e:
+                    logger.warning(f"Failed to decode binary data for key {key}: {e}")
+                    decoded_item[key] = value  # Keep original if decode fails
+            else:
+                # Recursively process nested structures
+                decoded_item[key] = decode_dynamodb_binary_data(value)
+        return decoded_item
+    elif isinstance(item, list):
+        return [decode_dynamodb_binary_data(element) for element in item]
+    else:
+        return item
 
 
 def validate_environment():
@@ -280,47 +303,63 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         raise
 
 
-def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
-    """Parse a single DynamoDB JSON export file from S3"""
-    try:
-        logger.debug(f"Parsing file: {s3_key}")
+    def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
+        """Parse a single DynamoDB JSON export file from S3 with binary data decoding"""
+        try:
+            logger.debug(f"Parsing file: {s3_key}")
 
-        response = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
+            response = s3_client.get_object(Bucket=s3_bucket, Key=s3_key)
 
-        # Handle gzipped files
-        if s3_key.endswith('.gz'):
-            content = gzip.decompress(response['Body'].read()).decode('utf-8')
-        else:
-            content = response['Body'].read().decode('utf-8')
+            # Handle gzipped files
+            if s3_key.endswith('.gz'):
+                content = gzip.decompress(response['Body'].read()).decode('utf-8')
+            else:
+                content = response['Body'].read().decode('utf-8')
 
-        items = []
-        line_count = 0
-        error_count = 0
+            items = []
+            line_count = 0
+            error_count = 0
+            binary_decode_count = 0
 
-        for line in content.strip().split('\n'):
-            line_count += 1
-            if line.strip():
-                try:
-                    item_data = json.loads(line)
-                    if 'Item' in item_data:
-                        items.append(item_data['Item'])
-                    elif isinstance(item_data, dict):
-                        # Handle case where the line is already the item
-                        items.append(item_data)
-                except json.JSONDecodeError as e:
-                    error_count += 1
-                    if error_count <= 5:  # Log first 5 errors only
-                        logger.warning(f"JSON decode error on line {line_count}: {str(e)}")
+            for line in content.strip().split('\n'):
+                line_count += 1
+                if line.strip():
+                    try:
+                        item_data = json.loads(line)
+                        
+                        if 'Item' in item_data:
+                            raw_item = item_data['Item']
+                        elif isinstance(item_data, dict):
+                            raw_item = item_data
+                        else:
+                            continue
+                        
+                        # Decode binary data in the item
+                        decoded_item = decode_dynamodb_binary_data(raw_item)
+                        
+                        # Count items with binary data for logging
+                        if decoded_item != raw_item:
+                            binary_decode_count += 1
+                        
+                        items.append(decoded_item)
+                        
+                    except json.JSONDecodeError as e:
+                        error_count += 1
+                        if error_count <= 5:  # Log first 5 errors only
+                            logger.warning(f"JSON decode error on line {line_count}: {str(e)}")
 
-        if error_count > 0:
-            logger.warning(f"File {s3_key}: {error_count} JSON decode errors out of {line_count} lines")
+            if error_count > 0:
+                logger.warning(f"File {s3_key}: {error_count} JSON decode errors out of {line_count} lines")
+            
+            if binary_decode_count > 0:
+                logger.info(f"File {s3_key}: Decoded binary data in {binary_decode_count} items")
 
-        logger.debug(f"Parsed {len(items)} items from {s3_key}")
-        return items
+            logger.debug(f"Parsed {len(items)} items from {s3_key}")
+            return items
 
-    except Exception as e:
-        logger.error(f"Error parsing file {s3_key}: {str(e)}")
-        return []
+        except Exception as e:
+            logger.error(f"Error parsing file {s3_key}: {str(e)}")
+            return []
 
 
 def clear_existing_table_data(table_name, preserve_schema=True):
