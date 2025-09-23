@@ -7,6 +7,7 @@ import time
 from decimal import Decimal
 import logging
 from datetime import datetime
+import base64
 import re
 
 # Set up logging
@@ -279,6 +280,31 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         logger.error(f"Failed to get export data files for {export_info.get('table_name', 'unknown')}: {str(e)}")
         raise
 
+def decode_binary(item):
+    """Recursively decode binary attributes in DynamoDB item"""
+    if isinstance(item, dict):
+        if len(item) == 1:
+            key, value = next(iter(item.items()))
+            if key == 'B':
+                try:
+                    return base64.b64decode(value)
+                except:
+                    return value
+            elif key == 'BS' and isinstance(value, list):
+                try:
+                    return [base64.b64decode(v) for v in value]
+                except:
+                    return value
+            elif key in ['M', 'L']:
+                if key == 'M' and isinstance(value, dict):
+                    return {k: decode_binary(v) for k, v in value.items()}
+                elif key == 'L' and isinstance(value, list):
+                    return [decode_binary(v) for v in value]
+        return {k: decode_binary(v) for k, v in item.items()}
+    elif isinstance(item, list):
+        return [decode_binary(v) for v in item]
+    return item
+
 
 def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
     """Parse a single DynamoDB JSON export file from S3"""
@@ -303,13 +329,19 @@ def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
                 try:
                     item_data = json.loads(line)
                     if 'Item' in item_data:
-                        items.append(item_data['Item'])
+                        item = item_data['Item']
                     elif isinstance(item_data, dict):
-                        # Handle case where the line is already the item
-                        items.append(item_data)
+                        item = item_data
+                    else:
+                        continue
+
+                    # Add this single line to decode binary attributes
+                    item = decode_binary(item)
+
+                    items.append(item)
                 except json.JSONDecodeError as e:
                     error_count += 1
-                    if error_count <= 5:  # Log first 5 errors only
+                    if error_count <= 5:
                         logger.warning(f"JSON decode error on line {line_count}: {str(e)}")
 
         if error_count > 0:
