@@ -280,7 +280,7 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         logger.error(f"Failed to get export data files for {export_info.get('table_name', 'unknown')}: {str(e)}")
         raise
 
-def decode_binary_attributes(item):
+def decode_binary(item):
     if isinstance(item, dict):
         if len(item) == 1:
             key, value = next(iter(item.items()))
@@ -294,9 +294,9 @@ def decode_binary_attributes(item):
                 return value
             return item
         else:
-            return {k: decode_binary_attributes(v) for k, v in item.items()}
+            return {k: decode_binary(v) for k, v in item.items()}
     elif isinstance(item, list):
-        return [decode_binary_attributes(v) for v in item]
+        return [decode_binary(v) for v in item]
     else:
         return item
 
@@ -329,10 +329,7 @@ def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
                         item = item_data
                     else:
                         continue
-
-                    # Add this single line to decode binary attributes
                     item = decode_binary(item)
-
                     items.append(item)
                 except json.JSONDecodeError as e:
                     error_count += 1
