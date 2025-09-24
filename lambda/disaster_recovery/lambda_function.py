@@ -290,8 +290,6 @@ def decode_binary(item):
                 except Exception as e:
                     logger.warning(f"Failed to decode binary attribute: {e}")
                     return value
-            elif key == 'S':
-                return value
             return item
         else:
             return {k: decode_binary(v) for k, v in item.items()}
