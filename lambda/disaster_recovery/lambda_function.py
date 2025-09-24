@@ -280,30 +280,25 @@ def get_export_data_files(s3_client, s3_bucket, export_info):
         logger.error(f"Failed to get export data files for {export_info.get('table_name', 'unknown')}: {str(e)}")
         raise
 
-def decode_binary(item):
-    """Recursively decode binary attributes in DynamoDB item"""
+def decode_binary_attributes(item):
     if isinstance(item, dict):
         if len(item) == 1:
             key, value = next(iter(item.items()))
             if key == 'B':
                 try:
                     return base64.b64decode(value)
-                except:
+                except Exception as e:
+                    logger.warning(f"Failed to decode binary attribute: {e}")
                     return value
-            elif key == 'BS' and isinstance(value, list):
-                try:
-                    return [base64.b64decode(v) for v in value]
-                except:
-                    return value
-            elif key in ['M', 'L']:
-                if key == 'M' and isinstance(value, dict):
-                    return {k: decode_binary(v) for k, v in value.items()}
-                elif key == 'L' and isinstance(value, list):
-                    return [decode_binary(v) for v in value]
-        return {k: decode_binary(v) for k, v in item.items()}
+            elif key == 'S':
+                return value
+            return item
+        else:
+            return {k: decode_binary_attributes(v) for k, v in item.items()}
     elif isinstance(item, list):
-        return [decode_binary(v) for v in item]
-    return item
+        return [decode_binary_attributes(v) for v in item]
+    else:
+        return item
 
 
 def parse_dynamodb_json_file(s3_client, s3_bucket, s3_key):
