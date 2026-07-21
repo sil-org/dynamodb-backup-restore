@@ -8,7 +8,7 @@ locals {
   } : {}
 
   short_env_names = {
-    "staging"  = "stg"
+    "staging"    = "stg"
     "production" = "prod"
   }
   short_env_name = local.short_env_names[var.environment]
@@ -168,7 +168,7 @@ resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
       },
       {
         Effect = "Allow"
@@ -182,11 +182,11 @@ resource "aws_iam_role_policy" "daily_backup_lambda_policy" {
         Resource = concat(
 
           [for table_name in var.dynamodb_tables :
-            "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
+            "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
           ],
 
           [for table_name in var.dynamodb_tables :
-            "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}/export/*"
+            "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${table_name}/export/*"
           ]
         )
       },
@@ -304,7 +304,7 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
           "logs:DescribeLogGroups",
           "logs:DescribeLogStreams"
         ]
-        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
       },
 
       {
@@ -330,10 +330,10 @@ resource "aws_iam_role_policy" "disaster_recovery_lambda_policy" {
         ]
         Resource = concat(
           [for table_name in var.dynamodb_tables :
-            "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
+            "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${table_name}"
           ],
           [for table_name in var.dynamodb_tables :
-            "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${table_name}/index/*"
+            "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${table_name}/index/*"
           ]
         )
       },
@@ -403,10 +403,10 @@ resource "aws_lambda_function" "disaster_recovery" {
 
   environment {
     variables = merge({
-      BACKUP_BUCKET = data.aws_s3_bucket.mfa_backups.bucket
-      ENVIRONMENT   = local.short_env_name
+      BACKUP_BUCKET   = data.aws_s3_bucket.mfa_backups.bucket
+      ENVIRONMENT     = local.short_env_name
       DYNAMODB_TABLES = jsonencode(var.dynamodb_tables)
-    }, var.restore_storage_mode == "b2" ? {
+      }, var.restore_storage_mode == "b2" ? {
       B2_APPLICATION_KEY_ID = var.b2_application_key_id
       B2_APPLICATION_KEY    = var.b2_application_key
       B2_BUCKET_NAME        = var.b2_bucket
