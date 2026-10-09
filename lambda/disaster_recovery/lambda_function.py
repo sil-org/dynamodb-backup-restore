@@ -607,6 +607,12 @@ def restore_table_from_s3_export(s3_client, table_name, export_info, s3_bucket, 
         }
 
 
+def json_safe(obj):
+    """Return obj as plain JSON-compatible data (e.g. Decimals converted) so the
+    Lambda response body is a real JSON object rather than a JSON-encoded string."""
+    return json.loads(json.dumps(obj, default=decimal_default))
+
+
 def lambda_handler(event, context):
     """
     Main handler for batch write restoration from Backup exports in S3 or B2
@@ -778,7 +784,7 @@ def lambda_handler(event, context):
 
             return {
                 'statusCode': 200,
-                'body': json.dumps(dry_run_summary, default=decimal_default, indent=2)
+                'body': json_safe(dry_run_summary)
             }
 
         # Perform actual restore
@@ -864,7 +870,7 @@ def lambda_handler(event, context):
 
         return {
             'statusCode': status_code,
-            'body': json.dumps(summary, default=decimal_default, indent=2)
+            'body': json_safe(summary)
         }
 
     except Exception as e:
@@ -885,5 +891,5 @@ def lambda_handler(event, context):
 
         return {
             'statusCode': 500,
-            'body': json.dumps(error_response, default=decimal_default, indent=2)
+            'body': json_safe(error_response)
         }
